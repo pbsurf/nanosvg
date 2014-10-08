@@ -78,6 +78,14 @@ extern "C" {
 #define NSVG_SPREAD_REFLECT 1
 #define NSVG_SPREAD_REPEAT 2
 
+#define NSVG_CAP_BUTT 0
+#define NSVG_CAP_ROUND 1
+#define NSVG_CAP_SQUARE 2
+
+#define NSVG_JOIN_MITER 0
+#define NSVG_JOIN_ROUND 1
+#define NSVG_JOIN_BEVEL 2
+
 typedef struct NSVGgradientStop {
 	unsigned int color;
 	float offset;
@@ -114,6 +122,8 @@ typedef struct NSVGshape
 	NSVGpaint stroke;			// Stroke paint
 	float opacity;				// Opacity of the shape.
 	float strokeWidth;			// Stroke width (scaled)
+	char strokeCap;				// Stroke line cap
+	char strokeJoin;			// Stroke line join
 	float bounds[4];			// Tight bounding box of the shape [minx,miny,maxx,maxy].
 	NSVGpath* paths;			// Linked list of paths in the image.
 	struct NSVGshape* next;		// Pointer to next shape, or NULL if last element.
@@ -351,6 +361,8 @@ typedef struct NSVGattrib
 	char fillGradient[64];
 	char strokeGradient[64];
 	float strokeWidth;
+	char strokeCap;
+	char strokeJoin;
 	float fontSize;
 	unsigned int stopColor;
 	float stopOpacity;
@@ -554,6 +566,8 @@ static NSVGparser* nsvg__createParser()
 	p->attr[0].strokeOpacity = 1;
 	p->attr[0].stopOpacity = 1;
 	p->attr[0].strokeWidth = 1;
+	p->attr[0].strokeCap = NSVG_CAP_BUTT;
+	p->attr[0].strokeJoin = NSVG_JOIN_MITER;
 	p->attr[0].hasFill = 1;
 	p->attr[0].hasStroke = 0;
 	p->attr[0].visible = 1;
@@ -761,6 +775,8 @@ static void nsvg__addShape(NSVGparser* p)
 
 	scale = nsvg__maxf(fabsf(attr->xform[0]), fabsf(attr->xform[3]));
 	shape->strokeWidth = attr->strokeWidth * scale;
+	shape->strokeCap = attr->strokeCap;
+	shape->strokeJoin = attr->strokeJoin;
 	shape->opacity = attr->opacity;
 
 	shape->paths = p->plist;
@@ -1423,6 +1439,20 @@ static int nsvg__parseAttr(NSVGparser* p, const char* name, const char* value)
 		}
 	} else if (strcmp(name, "stroke-width") == 0) {
 		attr->strokeWidth = nsvg__parseFloat(p, value, 2);
+	} else if (strcmp(name, "stroke-linecap") == 0) {
+		if (strcmp(value, "butt") == 0)
+			attr->strokeCap = NSVG_CAP_BUTT;
+		else if (strcmp(value, "round") == 0)
+			attr->strokeCap = NSVG_CAP_ROUND;
+		else if (strcmp(value, "square") == 0)
+			attr->strokeCap = NSVG_CAP_SQUARE;
+	} else if (strcmp(name, "stroke-linejoin") == 0) {
+		if (strcmp(value, "miter") == 0)
+			attr->strokeCap = NSVG_JOIN_MITER;
+		else if (strcmp(value, "round") == 0)
+			attr->strokeCap = NSVG_JOIN_ROUND;
+		else if (strcmp(value, "bevel") == 0)
+			attr->strokeCap = NSVG_JOIN_BEVEL;
 	} else if (strcmp(name, "stroke-opacity") == 0) {
 		attr->strokeOpacity = nsvg__parseFloat(NULL, value, 2);
 	} else if (strcmp(name, "font-size") == 0) {
