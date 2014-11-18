@@ -611,6 +611,15 @@ error:
 	return NULL;
 }
 
+static void nsvg__deleteText(NSVGtext* text)
+{
+	if (text->fontfamily != NULL)
+		free(text->fontfamily);
+	if (text->s != NULL)
+		free(text->s);
+	free(text);
+}
+
 static void nsvg__deletePaths(NSVGpath* path)
 {
 	while (path) {
@@ -2693,6 +2702,7 @@ void nsvgDelete(NSVGimage* image)
 		snext = shape->next;
 		if(shape->id)
 			free(shape->id);
+		nsvg__deleteText(shape->text);
 		nsvg__deletePaths(shape->paths);
 		nsvg__deletePaint(&shape->fill);
 		nsvg__deletePaint(&shape->stroke);
