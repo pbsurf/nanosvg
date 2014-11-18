@@ -125,7 +125,7 @@ typedef struct NSVGpath
 
 typedef struct NSVGtext
 {
-	float xform[6];	// Transform; text is positioned add (0,0) in transformed space
+	float xform[6];	// Transform; text is positioned at (0,0) in transformed space
 	int anchor;			// horizontal alignment
 	float fontsize;				// Font size
 	char* fontfamily; 	// Name of font family
@@ -150,6 +150,7 @@ typedef struct NSVGimage
 {
 	float width;				// Width of the image.
 	float height;				// Height of the image.
+	float viewXform[6];	// Viewbox transform
 	NSVGshape* shapes;			// Linked list of shapes in the image.
 } NSVGimage;
 
@@ -2526,13 +2527,9 @@ static void nsvg__scaleXform(float* xform, float tx, float ty, float sx, float s
 	xform[5] = (xform[5] + ty)*sy;
 }
 
-static void nsvg__scaleToViewbox(NSVGparser* p, const char* units)
+static void nsvg__setViewXform(NSVGparser* p, const char* units)
 {
-	NSVGshape* shape;
-	NSVGpath* path;
-	float tx, ty, sx, sy, us, bounds[4], t[6];
-	int i;
-	float* pt;
+	float tx, ty, sx, sy, us, bounds[4];
 
 	// Guess image size if not set completely.
 	nsvg__imageBounds(p, bounds);
@@ -2572,10 +2569,26 @@ static void nsvg__scaleToViewbox(NSVGparser* p, const char* units)
 		ty += nsvg__viewAlign(p->viewHeight*sy, p->image->height, p->alignY) / sy;
 	}
 
-	// Transform
 	sx *= us;
 	sy *= us;
-	for (shape = p->image->shapes; shape != NULL; shape = shape->next) {
+
+	nsvg__xformIdentity(p->image->viewXform);
+	nsvg__scaleXform(p->image->viewXform, tx,ty, sx,sy);
+}
+
+static void nsvgApplyViewXform(NSVGimage* image)
+{
+	NSVGshape* shape;
+	NSVGpath* path;
+	int i;
+	float* pt;
+	float t[6];
+	float sx = image->viewXform[0];
+	float sy = image->viewXform[3];
+	float tx = image->viewXform[4]/sx;
+	float ty = image->viewXform[5]/sy;
+
+	for (shape = image->shapes; shape != NULL; shape = shape->next) {
 		shape->bounds[0] = (shape->bounds[0] + tx) * sx;
 		shape->bounds[1] = (shape->bounds[1] + ty) * sy;
 		shape->bounds[2] = (shape->bounds[2] + tx) * sx;
@@ -2607,7 +2620,8 @@ static void nsvg__scaleToViewbox(NSVGparser* p, const char* units)
 		}
 
 	}
-
+	// reset transform to identity after applying
+  nsvg__xformIdentity(image->viewXform);
 }
 
 NSVGimage* nsvgParse(char* input, const char* units, float dpi)
@@ -2623,8 +2637,8 @@ NSVGimage* nsvgParse(char* input, const char* units, float dpi)
 
 	nsvg__parseXML(input, nsvg__startElement, nsvg__endElement, nsvg__content, p);
 
-	// Scale to viewBox
-	nsvg__scaleToViewbox(p, units);
+	// calculate viewBox transform
+	nsvg__setViewXform(p, units);
 
 	ret = p->image;
 	p->image = NULL;
