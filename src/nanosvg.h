@@ -140,6 +140,7 @@ typedef struct NSVGshape
 	float strokeWidth;			// Stroke width (scaled)
 	char strokeCap;				// Stroke line cap
 	char strokeJoin;			// Stroke line join
+	char* id;
 	float bounds[4];			// Tight bounding box of the shape [minx,miny,maxx,maxy].
 	NSVGpath* paths;			// Linked list of paths in the image.
 	NSVGtext* text;				// Exclusive of paths
@@ -389,6 +390,7 @@ typedef struct NSVGattrib
 	float strokeWidth;
 	char strokeCap;
 	char strokeJoin;
+	char id[64];
 	float fontSize;
 	unsigned int stopColor;
 	float stopOpacity;
@@ -813,6 +815,8 @@ static void nsvg__addShape(NSVGparser* p)
 	shape->strokeCap = attr->strokeCap;
 	shape->strokeJoin = attr->strokeJoin;
 	shape->opacity = attr->opacity;
+	if(attr->id)
+		shape->id = nsvg__strdup(attr->id);
 
 	if (p->plist) {
 		shape->paths = p->plist;
@@ -1507,6 +1511,9 @@ static int nsvg__parseAttr(NSVGparser* p, const char* name, const char* value)
 		attr->stopOpacity = nsvg__parseFloat(NULL, value, 2);
 	} else if (strcmp(name, "offset") == 0) {
 		attr->stopOffset = nsvg__parseFloat(NULL, value, 2);
+	} else if (strcmp(name, "id") == 0) {
+		strncpy(attr->id, value, 63);
+		attr->id[63] = '\0';
 	} else {
 		return 0;
 	}
@@ -2684,6 +2691,8 @@ void nsvgDelete(NSVGimage* image)
 	shape = image->shapes;
 	while (shape != NULL) {
 		snext = shape->next;
+		if(shape->id)
+			free(shape->id);
 		nsvg__deletePaths(shape->paths);
 		nsvg__deletePaint(&shape->fill);
 		nsvg__deletePaint(&shape->stroke);
