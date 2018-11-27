@@ -90,7 +90,20 @@ enum NSVGtextAnchor {
 	// Horizontal align
 	NSVG_ANCHOR_LEFT 		= 1<<0,	// Default, align text horizontally to left.
 	NSVG_ANCHOR_CENTER 	= 1<<1,	// Align text horizontally to center.
-	NSVG_ANCHOR_RIGHT 	= 1<<2,	// Align text horizontally to right.
+	NSVG_ANCHOR_RIGHT 	= 1<<2 	// Align text horizontally to right.
+};
+
+enum NSVGtextStyle {
+	// Horizontal align
+	NSVG_TEXT_NORMAL 		= 1<<0,	// Default, normal text
+	NSVG_TEXT_ITALIC  	= 1<<1,	// italic text
+	NSVG_TEXT_OBLIQUE 	= 1<<2 	// bold text
+};
+
+enum NSVGstrokeAlign {
+	NSVG_STROKE_ALIGN_CENTER 	= 0,	// Default, stroke centered on path
+	NSVG_STROKE_ALIGN_INNER 	= 1,	// stroke inside path
+	NSVG_STROKE_ALIGN_OUTER 	= 2 	// stroke outside path
 };
 
 typedef struct NSVGgradientStop {
@@ -127,6 +140,7 @@ typedef struct NSVGtext
 {
 	float xform[6];	// Transform; text is positioned at (0,0) in transformed space
 	int anchor;			// horizontal alignment
+	int style;
 	float fontsize;				// Font size
 	char* fontfamily; 	// Name of font family
 	char* s;					// The text itself
@@ -140,6 +154,7 @@ typedef struct NSVGshape
 	float strokeWidth;			// Stroke width (scaled)
 	char strokeCap;				// Stroke line cap
 	char strokeJoin;			// Stroke line join
+	char strokeAlign;
 	char* id;
 	float bounds[4];			// Tight bounding box of the shape [minx,miny,maxx,maxy].
 	NSVGpath* paths;			// Linked list of paths in the image.
@@ -219,7 +234,7 @@ static int nsvg__isnum(char c)
 
 static char* nsvg__strdup(const char* s)
 {
-	char* d = s != NULL ? malloc(strlen(s) + 1) : NULL;
+	char* d = s != NULL ? (char*)malloc(strlen(s) + 1) : NULL;
 	if (d != NULL)
 	  strcpy(d, s);
 	return d;
@@ -390,7 +405,7 @@ typedef struct NSVGattrib
 	float strokeWidth;
 	char strokeCap;
 	char strokeJoin;
-	char id[64];
+	char strokeAlign;
 	float fontSize;
 	unsigned int stopColor;
 	float stopOpacity;
@@ -411,6 +426,7 @@ typedef struct NSVGparser
 	NSVGtext* text;
 	NSVGimage* image;
 	NSVGgradientData* gradients;
+	char id[64];
 	float viewMinx, viewMiny, viewWidth, viewHeight;
 	int alignX, alignY, alignType;
 	float dpi;
@@ -597,6 +613,7 @@ static NSVGparser* nsvg__createParser()
 	p->attr[0].strokeWidth = 1;
 	p->attr[0].strokeCap = NSVG_CAP_BUTT;
 	p->attr[0].strokeJoin = NSVG_JOIN_MITER;
+	p->attr[0].strokeAlign = NSVG_STROKE_ALIGN_CENTER;
 	p->attr[0].hasFill = 1;
 	p->attr[0].hasStroke = 0;
 	p->attr[0].visible = 1;
@@ -613,11 +630,13 @@ error:
 
 static void nsvg__deleteText(NSVGtext* text)
 {
-	if (text->fontfamily != NULL)
+	if (text) {
+		if (text->fontfamily)
 		free(text->fontfamily);
-	if (text->s != NULL)
+		if (text->s)
 		free(text->s);
 	free(text);
+}
 }
 
 static void nsvg__deletePaths(NSVGpath* path)
@@ -823,9 +842,11 @@ static void nsvg__addShape(NSVGparser* p)
 	shape->strokeWidth = attr->strokeWidth * scale;
 	shape->strokeCap = attr->strokeCap;
 	shape->strokeJoin = attr->strokeJoin;
+	shape->strokeAlign = attr->strokeAlign;
 	shape->opacity = attr->opacity;
-	if(attr->id)
-		shape->id = nsvg__strdup(attr->id);
+	if(p->id[0])
+		shape->id = nsvg__strdup(p->id);
+	p->id[0] = '\0';
 
 	if (p->plist) {
 		shape->paths = p->plist;
@@ -1507,6 +1528,13 @@ static int nsvg__parseAttr(NSVGparser* p, const char* name, const char* value)
 			attr->strokeCap = NSVG_JOIN_ROUND;
 		else if (strcmp(value, "bevel") == 0)
 			attr->strokeCap = NSVG_JOIN_BEVEL;
+	} else if (strcmp(name, "stroke-alignment") == 0) {
+		if (strcmp(value, "center") == 0)
+			attr->strokeAlign = NSVG_STROKE_ALIGN_CENTER;
+		else if (strcmp(value, "inner") == 0)
+			attr->strokeAlign = NSVG_STROKE_ALIGN_INNER;
+		else if (strcmp(value, "outer") == 0)
+			attr->strokeAlign = NSVG_STROKE_ALIGN_OUTER;
 	} else if (strcmp(name, "stroke-opacity") == 0) {
 		attr->strokeOpacity = nsvg__parseFloat(NULL, value, 2);
 	} else if (strcmp(name, "font-size") == 0) {
@@ -1521,8 +1549,8 @@ static int nsvg__parseAttr(NSVGparser* p, const char* name, const char* value)
 	} else if (strcmp(name, "offset") == 0) {
 		attr->stopOffset = nsvg__parseFloat(NULL, value, 2);
 	} else if (strcmp(name, "id") == 0) {
-		strncpy(attr->id, value, 63);
-		attr->id[63] = '\0';
+		strncpy(p->id, value, 63);
+		p->id[63] = '\0';
 	} else {
 		return 0;
 	}
@@ -2252,6 +2280,7 @@ static void nsvg__parseText(NSVGparser* p, const char** attr)
 	if (text == NULL) return;
 	memset(text, 0, sizeof(NSVGtext));
 	text->anchor = NSVG_ANCHOR_LEFT;
+	text->style = NSVG_TEXT_NORMAL;
 
 	for (i = 0; attr[i]; i += 2) {
 		if (!nsvg__parseAttr(p, attr[i], attr[i + 1])) {
@@ -2263,6 +2292,11 @@ static void nsvg__parseText(NSVGparser* p, const char** attr)
 				if (strcmp(attr[i + 1], "start") == 0) text->anchor = NSVG_ANCHOR_LEFT;
 				else if (strcmp(attr[i + 1], "middle") == 0) text->anchor = NSVG_ANCHOR_CENTER;
 				else if (strcmp(attr[i + 1], "end") == 0) text->anchor = NSVG_ANCHOR_RIGHT;
+			}
+			else if (strcmp(attr[i], "text-style") == 0) {
+				if (strcmp(attr[i + 1], "normal") == 0) text->style = NSVG_TEXT_NORMAL;
+				else if (strcmp(attr[i + 1], "italic") == 0) text->style = NSVG_TEXT_ITALIC;
+				else if (strcmp(attr[i + 1], "oblique") == 0) text->style = NSVG_TEXT_OBLIQUE;
 			}
 		}
 	}
@@ -2637,7 +2671,7 @@ static void nsvgApplyViewXform(NSVGimage* image)
 
 	}
 	// reset transform to identity after applying
-  nsvg__xformIdentity(image->viewXform);
+	nsvg__xformIdentity(image->viewXform);
 }
 
 NSVGimage* nsvgParse(char* input, const char* units, float dpi)
