@@ -2970,8 +2970,25 @@ static void nsvg__setViewXform(NSVGparser* p, const char* units)
 
 	sx *= us;
 	sy *= us;
-	avgs = (sx+sy) / 2.0f;
-	for (shape = p->image->shapes; shape != NULL; shape = shape->next) {
+
+  nsvg__xformIdentity(p->image->viewXform);
+  nsvg__scaleXform(p->image->viewXform, tx,ty, sx,sy);
+}
+
+static void nsvgApplyViewXform(NSVGimage* image)
+{
+  NSVGshape* shape;
+  NSVGpath* path;
+  int i;
+  float* pt;
+  float t[6];
+  float sx = image->viewXform[0];
+  float sy = image->viewXform[3];
+  float tx = image->viewXform[4]/sx;
+  float ty = image->viewXform[5]/sy;
+  float avgs = (sx+sy) / 2.0f;
+
+  for (shape = image->shapes; shape != NULL; shape = shape->next) {
 		shape->bounds[0] = (shape->bounds[0] + tx) * sx;
 		shape->bounds[1] = (shape->bounds[1] + ty) * sy;
 		shape->bounds[2] = (shape->bounds[2] + tx) * sx;
@@ -3007,6 +3024,8 @@ static void nsvg__setViewXform(NSVGparser* p, const char* units)
 		for (i = 0; i < shape->strokeDashCount; i++)
 			shape->strokeDashArray[i] *= avgs;
 	}
+  // reset transform to identity after applying
+  nsvg__xformIdentity(image->viewXform);
 }
 
 NSVGimage* nsvgParse(char* input, const char* units, float dpi)
